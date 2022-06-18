@@ -1,2 +1,2 @@
-external print string -> void: io/print;
-external print string -> void: io/println;
+external print any -> void: io/print;
+external input void -> string: io/input;

@@ -1,7 +1,5 @@
 package engineer.leepsky.jslang;
 
-import java.util.Map;
-
 public enum Type {
     INT8,
     INT16,

@@ -12,7 +12,7 @@ import static engineer.leepsky.jslang.Type.*;
 public class Parser {
 
     // TODO: rework std
-    private static Path LIBS_PATH = Path.of("/home/rostislove/Programming/jslang/");
+    private static Path LIBS_PATH = Path.of("/home/rostislove/Git/jslang3/slang_std_cpp/build");
 
     private Parser() { }
 
@@ -45,6 +45,10 @@ public class Parser {
             = Pattern.compile("fn +(.+?) *\\((.*?)\\) *(.+?) *-> *(.+?) *\\{([^}]+)}",
             Pattern.MULTILINE | Pattern.DOTALL);
 
+    private static final Pattern externalPattern
+            = Pattern.compile("external\\s+([^ ]+)\\s+(.+)->(.*):\\s*([^ ]+)\\s*;",
+            Pattern.MULTILINE);
+
 
     private static final Pattern intPattern
             = Pattern.compile("\\d+");
@@ -61,13 +65,21 @@ public class Parser {
         return result;
     }
 
-    private static List<Operation> parseOperations(String body) {
+    static class NoSuchExternalMethod extends RuntimeException { }
+
+    private static List<Operation> parseOperations(String body, Map<String, ExternalCall> externalCallMap) {
         List<Operation> operations = new ArrayList<>();
         String[] ops = body.split(";");
         for (String op : ops) {
             op = op.strip();
             if (op.equals("")) continue;
             if (op.equals("drop")) operations.add(new DropOp());
+            else if (op.charAt(op.length() - 1) == '!') {
+                String externalName = op.substring(0, op.length() - 1);
+                ExternalCall externalCall = externalCallMap.get(externalName);
+                if (externalCall == null) throw new NoSuchExternalMethod();
+                operations.add(externalCall);
+            }
             else {
                 if (intPattern.matcher(op).matches())
                     operations.add(new PushOp(new Variable(INT64, Integer.parseInt(op))));
@@ -75,17 +87,13 @@ public class Parser {
                     operations.add(new PushOp(new Variable(FLOAT64, Double.parseDouble(op))));
                 else if (op.equals("true") || op.equals("false"))
                     operations.add(new PushOp(new Variable(BOOLEAN, Boolean.parseBoolean(op))));
-                else if (op.equals("out.print"))
-                    operations.add(new PrintOp(System.out));
-                else if (op.equals("err.print"))
-                    operations.add(new PrintOp(System.err));
                 else throw new OpParsingError();
             }
         }
         return operations;
     }
 
-    public static Map<String, Function> parseFunctions(String src) {
+    public static Map<String, Function> parseFunctions(String src, Map<String, ExternalCall> externalCallMap) {
         Map<String, Function> functionMap = new HashMap<>();
         Matcher matcher = functionPattern.matcher(src);
         while (matcher.find()) {
@@ -99,10 +107,35 @@ public class Parser {
             for (String typename : splitNStrip(matcher.group(4), ",")) {
                 retTypes.add(getTypeFromString(typename));
             }
-            List<Operation> body = parseOperations(matcher.group(5));
+            List<Operation> body = parseOperations(matcher.group(5), externalCallMap);
             functionMap.put(name, new Function(name, namespaces, inTypes, retTypes, body));
         }
         return functionMap;
+    }
+
+    public static Map<String, ExternalCall> parseExternals(String src) {
+        Map<String, ExternalCall> externalCallMap = new HashMap<>();
+        Matcher matcher = externalPattern.matcher(src);
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            String[] inTypes = matcher.group(2).split(",");
+            List<Type> inTypesList = new ArrayList<>();
+            for (String inType : inTypes) {
+                Type type = stringTypeMap.get(inType.strip());
+                if (type == null) throw new NoSuchTypeError();
+                inTypesList.add(type);
+            }
+            String outTypes = matcher.group(3); // currently unused
+            String pathToExe = matcher.group(4);
+            externalCallMap.put(
+                    name,
+                    new ExternalCall(
+                            LIBS_PATH + "/" + pathToExe,
+                            inTypesList,
+                            List.of(VOID))
+            );
+        }
+        return externalCallMap;
     }
 
 }

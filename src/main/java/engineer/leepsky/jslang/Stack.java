@@ -48,11 +48,18 @@ public class Stack extends ArrayList<Variable> {
                             ));
     }
 
+    public Variable pop() {
+        Variable var = this.get(this.size() - 1);
+        this.remove(this.size() - 1);
+        return var;
+    }
+
     public void checkTypes(List<Type> types, String where) {
         int i = this.size();
 
         for (Type type : types) {
-            if (type != this.get(--i).type())
+            Type thisType = this.get(--i).type();
+            if (type != thisType && type != Type.ANY)
                 throw new ArgumentTypeMismatchError(
                         "Expected argument/return value of type `%s` for function `%s`, but got `%s` instead."
                                 .formatted(
